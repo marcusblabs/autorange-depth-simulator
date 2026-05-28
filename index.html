@@ -64,6 +64,8 @@
   .toggle button{flex:1;background:transparent;border:none;color:var(--muted2);font-family:inherit;font-size:12.5px;padding:9px;border-radius:6px;cursor:pointer;transition:all .14s}
   .toggle button.on{background:var(--accent);color:#ffffff;font-weight:600}
 
+  .vusd{font-size:12.5px;color:var(--muted2);margin-top:8px}
+  .vusd b{color:var(--accent);font-weight:600;font-family:"Roboto Mono",monospace}
   .note{font-size:12px;color:var(--warn);margin-top:11px;line-height:1.4;display:none}
   .note.show{display:block}
   .status{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.45}
@@ -220,6 +222,7 @@
         <div class="field">
           <label>Pool value <span class="u" id="vunit">(in WETH)</span></label>
           <input type="number" id="v" value="2000" step="any">
+          <div class="vusd" id="vusd"></div>
         </div>
         <div class="note" id="note"></div>
       </div>
@@ -295,7 +298,7 @@
   const els = {};
   ['chain','addr','addrhint','addtok','chips','chainhint','base','quote','apply','derived','autoband','bandw','refresh','status','srctag','netdot','netlabel',
    'regpanel','regtoggle','regchev','regsummary','addchain','openlib',
-   'pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','tunit','note','tnote',
+   'pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','vusd','tunit','note','tnote',
    'mult','herosub','mctr','veq','lar','lfr','resx','resy','rx','ry','thout',
    'ar_out','ar_px','ar_sl','fr_out','fr_px','fr_sl','slfac','chart','dxy','dyx','center','narrow','widen']
    .forEach(k=>els[k]=$(k));
@@ -331,6 +334,9 @@
   // The active pair symbols drive the model's labels. The token registry
   // is the single source of truth — these are only ever set by applyPair().
   let pairX='WBTC', pairY='WETH';
+  // Live USD price of the quote token (Y), captured when a pair is applied.
+  // Pool value is denominated in Y, so USD value = V * quotePriceUsd.
+  let quotePriceUsd=null;
 
   function setNet(ok){ els.netdot.classList.toggle('off',!ok); els.netlabel.textContent=ok?'live':'offline'; }
   function status(msg,err){ els.status.textContent=msg||''; els.status.classList.toggle('err',!!err); }
@@ -420,6 +426,7 @@
     const X=tokens[baseId],Y=tokens[quoteId]; if(!(X&&Y&&X.price&&Y.price))return;
     const P=X.price/Y.price;
     pairX=X.symbol; pairY=Y.symbol;
+    quotePriceUsd=Y.price;
     els.p.value=+P.toPrecision(8);
     if(els.autoband.checked){ const w=Math.max(.0005,(parseFloat(els.bandw.value)||5)/100), s=1+w;
       els.pa.value=+(P/s).toPrecision(8); els.pb.value=+(P*s).toPrecision(8); }
@@ -491,6 +498,7 @@
     els.mult.textContent=E.toFixed(1);
     els.mctr.innerHTML=Ectr.toFixed(1)+'&times;';
     els.veq.innerHTML=smart(V*E)+'<span class="unit">'+ty+'</span>';
+    els.vusd.innerHTML=(quotePriceUsd&&V>0)?'&approx; <b>$'+smart(V*quotePriceUsd)+'</b> at $'+smart(quotePriceUsd)+'/'+ty:'';
     els.lar.textContent=smart(L); els.lfr.textContent=smart(Lfull);
     els.resx.innerHTML=smart(x)+'<span class="unit">'+tx+'</span>';
     els.resy.innerHTML=smart(y)+'<span class="unit">'+ty+'</span>';

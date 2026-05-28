@@ -17,9 +17,14 @@ That is the whole deploy. To serve it locally instead: `python3 -m http.server` 
 
 Token registry (chain-scoped). Pick a chain, paste an ERC20 contract address, Add. The app calls the DefiLlama coins API and stores the symbol, price, and confidence. Each saved-token chip shows a confidence dot — gold when DefiLlama's price confidence is below 90%, so you can spot thin or stale prices before trusting them. CoinGecko ids are also supported (pick `CoinGecko ID` and enter a slug like `bitcoin`). Supported chains include Ethereum, Arbitrum, Base, Optimism, Polygon, BNB Chain, Avalanche, Gnosis, and Monad. Saved tokens persist in the browser via localStorage.
 
-The registry is the single source of truth for tokens, and it lives in a collapsible drawer that is collapsed by default so the simulator stays the focus. The slim bar shows the active pair (e.g. `WBTC / WETH · 1 WBTC = 36.35 WETH`); click it to expand and manage tokens. Its open/closed state is remembered between visits. The selected chain is the active context: the chips and the Base/Quote pickers only show tokens on that chain, so you can only build a pair from same-chain tokens (which is what a real pool is). Switch the Chain selector to work with tokens saved on another chain.
+Two clearly separated jobs:
 
-Pair. Choose a Base token (X) and Quote token (Y) from the active chain. The pair price is `P = priceX / priceY` in USD, which reads as Y per X. "Apply to model" writes that price into the band and, if auto center is on, sets `Pa = P / (1 + w)` and `Pb = P * (1 + w)` so the price sits at the geometric center. The Pool setup panel shows the active pair as a read-only label — there is no separate place to type token names, so the two can never disagree.
+- **Token library** (managing your tokens) lives in a collapsible drawer at the top, collapsed by default. This is where you add and remove tokens — paste an address, hit Add, or remove a chip. The slim bar summarizes what you have saved (e.g. `5 tokens saved · 2 on Ethereum`). New tokens are added to the active chain (set under Pool setup). Open/closed state is remembered between visits.
+- **Pair selection** (choosing what to analyze) lives in the main **Pool setup** panel, because it is the core action you take every time. Pick a Chain, then a Base token (X) and Quote token (Y) from the tokens saved on that chain. A `+ manage tokens` link there opens the library drawer when you need to add something.
+
+The selected chain is the active context: the library chips and the Base/Quote pickers only show tokens on that chain, so you can only build a pair from same-chain tokens (which is what a real pool is).
+
+Pair price is `P = priceX / priceY` in USD, which reads as Y per X. "Use pair" writes that price into the band and, if auto center is on, sets `Pa = P / (1 + w)` and `Pb = P * (1 + w)` so the price sits at the geometric center.
 
 Model. Depth is the liquidity constant `L`. For equal pool value the multiplier at price P is
 

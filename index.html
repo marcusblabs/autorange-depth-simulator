@@ -71,8 +71,12 @@
   .status.err{color:var(--warn)}
 
   /* token registry */
-  .addrow{display:grid;grid-template-columns:150px 1fr auto;gap:10px;align-items:end}
+  .addrow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
   @media(max-width:680px){.addrow{grid-template-columns:1fr}}
+  .drawer-help{font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+  .drawer-help b{color:var(--muted2);font-weight:600}
+  .addchain{color:var(--accent-dim);text-transform:none;letter-spacing:0;font-size:11px}
+  .setup-divider{height:1px;background:var(--line);margin:6px 0 16px}
   .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px;min-height:8px}
   .chip{display:inline-flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:7px 9px 7px 12px;font-size:13px}
   .chip .cdot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 7px var(--accent);flex:none}
@@ -153,47 +157,27 @@
     <div class="pill"><span class="dot" id="netdot"></span> <span id="netlabel">live</span></div>
   </header>
 
-  <!-- TOKEN REGISTRY (collapsible drawer) -->
+  <!-- TOKEN LIBRARY (collapsible drawer — add / remove tokens per chain only) -->
   <div class="panel collapsed" id="regpanel">
     <div class="ph reg-toggle" id="regtoggle" role="button" tabindex="0" aria-expanded="false">
-      <span>Token registry</span>
+      <span>Token library</span>
       <span class="reg-summary" id="regsummary"></span>
       <span class="right" id="srctag">source: DefiLlama</span>
       <span class="chev" id="regchev">&#9656;</span>
     </div>
     <div class="reg-body" id="regbody">
-    <div class="addrow">
-      <div class="field" style="margin:0">
-        <label>Chain</label>
-        <select id="chain"></select>
+      <p class="drawer-help">Save tokens here, then pick the pair to analyze under <b>Pool setup</b> below. The active chain is set there — new tokens are added to it.</p>
+      <div class="addrow">
+        <div class="field" style="margin:0">
+          <label>Contract address <span class="u" id="addrhint">(0x...)</span> <span class="addchain" id="addchain"></span></label>
+          <input type="text" id="addr" placeholder="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2">
+        </div>
+        <button class="btn" id="addtok">Add token</button>
       </div>
-      <div class="field" style="margin:0">
-        <label>Contract address <span class="u" id="addrhint">(0x...)</span></label>
-        <input type="text" id="addr" placeholder="0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2">
-      </div>
-      <button class="btn" id="addtok">Add token</button>
-    </div>
-    <div class="chips" id="chips"></div>
-    <div class="chainhint" id="chainhint"></div>
-
-    <div class="pairbox">
-      <div class="field" style="margin:0">
-        <label>Base token (X)</label>
-        <select id="base"></select>
-      </div>
-      <div class="field" style="margin:0">
-        <label>Quote token (Y)</label>
-        <select id="quote"></select>
-      </div>
-      <button class="btn" id="apply" disabled>Apply to model</button>
-    </div>
-    <div class="derived" id="derived">Select two priced tokens to derive the pair price.</div>
-    <div class="optline">
-      <label><input type="checkbox" id="autoband" checked> auto center band at &plusmn;</label>
-      <input type="number" id="bandw" value="5" step="0.5"> <span>% width</span>
-      <button class="gbtn" style="flex:none;padding:7px 14px" id="refresh">Refresh prices</button>
-    </div>
-    <div class="status" id="status"></div>
+      <div class="chips" id="chips"></div>
+      <div class="chainhint" id="chainhint"></div>
+      <div style="margin-top:14px"><button class="gbtn" style="flex:none;padding:7px 14px" id="refresh">Refresh prices</button></div>
+      <div class="status" id="status"></div>
     </div><!-- /reg-body -->
   </div>
 
@@ -201,7 +185,22 @@
     <!-- INPUTS -->
     <div>
       <div class="panel">
-        <div class="ph">Pool setup <span class="right" id="pairlabel">WBTC / WETH</span></div>
+        <div class="ph">Pool setup <span class="right"><a href="#" id="openlib" style="color:var(--accent-dim)">+ manage tokens</a></span></div>
+        <div class="field">
+          <label>Chain</label>
+          <select id="chain"></select>
+        </div>
+        <div class="field row2">
+          <div><label>Base token (X)</label><select id="base"></select></div>
+          <div><label>Quote token (Y)</label><select id="quote"></select></div>
+        </div>
+        <div class="derived" id="derived">Select two priced tokens to derive the pair price.</div>
+        <div class="optline">
+          <label><input type="checkbox" id="autoband" checked> auto-center band &plusmn;</label>
+          <input type="number" id="bandw" value="5" step="0.5"> <span>% width</span>
+          <button class="btn" id="apply" disabled style="flex:none;padding:8px 14px">Use pair</button>
+        </div>
+        <div class="setup-divider"></div>
         <div class="field">
           <label>Price band <span class="u" id="punit">(WETH per WBTC)</span></label>
           <div class="row2">
@@ -296,8 +295,8 @@
   const $ = id => document.getElementById(id);
   const els = {};
   ['chain','addr','addrhint','addtok','chips','chainhint','base','quote','apply','derived','autoband','bandw','refresh','status','srctag','netdot','netlabel',
-   'regpanel','regtoggle','regchev','regsummary',
-   'pairlabel','pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','tunit','note','tnote',
+   'regpanel','regtoggle','regchev','regsummary','addchain','openlib',
+   'pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','tunit','note','tnote',
    'mult','herosub','mctr','veq','lar','lfr','resx','resy','rx','ry','thout',
    'ar_out','ar_px','ar_sl','fr_out','fr_px','fr_sl','slfac','chart','dxy','dyx','center','narrow','widen']
    .forEach(k=>els[k]=$(k));
@@ -397,6 +396,12 @@
       ? ('+ '+others+' token'+(others>1?'s':'')+' saved on other chains — switch the Chain selector to use them.')
       : '';
 
+    // Collapsed-drawer summary + "adding to {chain}" hint
+    els.regsummary.textContent = all.length
+      ? (all.length+' token'+(all.length>1?'s':'')+' saved · '+onChain.length+' on '+chainLabel(activeChain))
+      : 'No tokens saved yet';
+    els.addchain.textContent = 'on '+chainLabel(activeChain);
+
     // Pair pickers: only the active chain's tokens, so you can only pair same-chain tokens
     const opts='<option value="">&mdash;</option>'+onChain.map(t=>'<option value="'+t.id+'">'+t.symbol+'</option>').join('');
     els.base.innerHTML=opts; els.quote.innerHTML=opts;
@@ -416,7 +421,6 @@
     const X=tokens[baseId],Y=tokens[quoteId]; if(!(X&&Y&&X.price&&Y.price))return;
     const P=X.price/Y.price;
     pairX=X.symbol; pairY=Y.symbol;
-    els.pairlabel.textContent=pairX+' / '+pairY;
     els.p.value=+P.toPrecision(8);
     if(els.autoband.checked){ const w=Math.max(.0005,(parseFloat(els.bandw.value)||5)/100), s=1+w;
       els.pa.value=+(P/s).toPrecision(8); els.pb.value=+(P*s).toPrecision(8); }
@@ -442,6 +446,13 @@
   els.regtoggle.addEventListener('keydown',e=>{
     if(e.key==='Enter'||e.key===' '){e.preventDefault();setReg(!els.regpanel.classList.contains('collapsed'));}
   });
+  // "+ manage tokens" link in Pool setup opens the library drawer
+  els.openlib.addEventListener('click',e=>{
+    e.preventDefault();
+    setReg(false);
+    els.regpanel.scrollIntoView({behavior:'smooth',block:'start'});
+    els.addr.focus();
+  });
 
   /* =========================================================
      MODEL  (depth multiplier + swap probe + chart)
@@ -461,8 +472,6 @@
     let Pa=num(els.pa),Pb=num(els.pb),P=num(els.p),V=num(els.v);
     els.punit.textContent='('+ty+' per '+tx+')'; els.vunit.textContent='(in '+ty+')';
     els.rx.textContent=tx; els.ry.textContent=ty;
-    // Keep the collapsed-drawer summary in sync with the active model pair
-    els.regsummary.innerHTML='<b>'+tx+'</b> / <b>'+ty+'</b> &middot; 1 '+tx+' = <span class="ar">'+(isFinite(P)?smart(P):'—')+'</span> '+ty;
 
     let bad=false,msg='';[els.pa,els.pb,els.p,els.v].forEach(e=>e.classList.remove('bad'));
     if(!(Pa>0)){bad=true;els.pa.classList.add('bad');}

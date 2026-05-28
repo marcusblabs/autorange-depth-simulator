@@ -79,6 +79,18 @@
   .chip .cdot.low{background:var(--gold);box-shadow:0 0 7px var(--gold)}
   .chip .csym{font-weight:600}
   .chainhint{font-size:12px;color:var(--muted);margin-top:9px}
+
+  /* collapsible registry drawer */
+  .reg-toggle{cursor:pointer;user-select:none;margin-bottom:16px}
+  .reg-toggle:hover .chev{color:var(--accent)}
+  .reg-toggle:focus-visible{outline:2px solid var(--accent-dim);outline-offset:3px;border-radius:6px}
+  .reg-summary{flex:1;display:none;text-transform:none;letter-spacing:0;color:var(--muted2);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .reg-summary b{color:var(--txt)} .reg-summary .ar{color:var(--accent)}
+  .chev{margin-left:12px;color:var(--muted);font-size:11px;transition:color .15s}
+  .panel.collapsed .reg-toggle{margin-bottom:0}
+  .panel.collapsed .reg-body{display:none}
+  .panel.collapsed .reg-summary{display:block}
+  .panel.collapsed #srctag{display:none}
   .chip .cprice{font-family:"IBM Plex Mono",monospace;color:var(--accent)}
   .chip .cchain{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   .chip .crm{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;border-radius:4px}
@@ -141,9 +153,15 @@
     <div class="pill"><span class="dot" id="netdot"></span> <span id="netlabel">live</span></div>
   </header>
 
-  <!-- TOKEN REGISTRY -->
-  <div class="panel">
-    <div class="ph">Token registry <span class="right" id="srctag">source: DefiLlama</span></div>
+  <!-- TOKEN REGISTRY (collapsible drawer) -->
+  <div class="panel collapsed" id="regpanel">
+    <div class="ph reg-toggle" id="regtoggle" role="button" tabindex="0" aria-expanded="false">
+      <span>Token registry</span>
+      <span class="reg-summary" id="regsummary"></span>
+      <span class="right" id="srctag">source: DefiLlama</span>
+      <span class="chev" id="regchev">&#9656;</span>
+    </div>
+    <div class="reg-body" id="regbody">
     <div class="addrow">
       <div class="field" style="margin:0">
         <label>Chain</label>
@@ -176,6 +194,7 @@
       <button class="gbtn" style="flex:none;padding:7px 14px" id="refresh">Refresh prices</button>
     </div>
     <div class="status" id="status"></div>
+    </div><!-- /reg-body -->
   </div>
 
   <div class="grid">
@@ -277,6 +296,7 @@
   const $ = id => document.getElementById(id);
   const els = {};
   ['chain','addr','addrhint','addtok','chips','chainhint','base','quote','apply','derived','autoband','bandw','refresh','status','srctag','netdot','netlabel',
+   'regpanel','regtoggle','regchev','regsummary',
    'pairlabel','pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','tunit','note','tnote',
    'mult','herosub','mctr','veq','lar','lfr','resx','resy','rx','ry','thout',
    'ar_out','ar_px','ar_sl','fr_out','fr_px','fr_sl','slfac','chart','dxy','dyx','center','narrow','widen']
@@ -410,6 +430,19 @@
   els.quote.onchange=()=>{quoteId=els.quote.value;updateDerived();};
   els.apply.onclick=applyPair;
 
+  /* ---------- collapsible registry drawer ---------- */
+  const REGKEY='arsim.reg.collapsed';
+  function setReg(collapsed){
+    els.regpanel.classList.toggle('collapsed',collapsed);
+    els.regchev.innerHTML = collapsed ? '▸' : '▾';   // ▸ collapsed, ▾ expanded
+    els.regtoggle.setAttribute('aria-expanded', String(!collapsed));
+    store.set(REGKEY, collapsed);
+  }
+  els.regtoggle.addEventListener('click',()=>setReg(!els.regpanel.classList.contains('collapsed')));
+  els.regtoggle.addEventListener('keydown',e=>{
+    if(e.key==='Enter'||e.key===' '){e.preventDefault();setReg(!els.regpanel.classList.contains('collapsed'));}
+  });
+
   /* =========================================================
      MODEL  (depth multiplier + swap probe + chart)
      ========================================================= */
@@ -428,6 +461,8 @@
     let Pa=num(els.pa),Pb=num(els.pb),P=num(els.p),V=num(els.v);
     els.punit.textContent='('+ty+' per '+tx+')'; els.vunit.textContent='(in '+ty+')';
     els.rx.textContent=tx; els.ry.textContent=ty;
+    // Keep the collapsed-drawer summary in sync with the active model pair
+    els.regsummary.innerHTML='<b>'+tx+'</b> / <b>'+ty+'</b> &middot; 1 '+tx+' = <span class="ar">'+(isFinite(P)?smart(P):'—')+'</span> '+ty;
 
     let bad=false,msg='';[els.pa,els.pb,els.p,els.v].forEach(e=>e.classList.remove('bad'));
     if(!(Pa>0)){bad=true;els.pa.classList.add('bad');}
@@ -520,6 +555,9 @@
 
   /* init: seed WBTC + WETH if registry empty, then price */
   (async function init(){
+    // Registry starts collapsed unless the user previously expanded it
+    const sc=store.get(REGKEY);
+    setReg(sc===undefined||sc===null ? true : !!sc);
     if(!Object.keys(tokens).length){
       tokens={
         'ethereum:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599':{id:'ethereum:0x2260fac5e5542a773aa44fbcfedf7c193bc2c599',chain:'ethereum',address:'0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599',symbol:'WBTC',price:null},

@@ -75,7 +75,10 @@
   @media(max-width:680px){.addrow{grid-template-columns:1fr}}
   .chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px;min-height:8px}
   .chip{display:inline-flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--line2);border-radius:9px;padding:7px 9px 7px 12px;font-size:13px}
+  .chip .cdot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 7px var(--accent);flex:none}
+  .chip .cdot.low{background:var(--gold);box-shadow:0 0 7px var(--gold)}
   .chip .csym{font-weight:600}
+  .chainhint{font-size:12px;color:var(--muted);margin-top:9px}
   .chip .cprice{font-family:"IBM Plex Mono",monospace;color:var(--accent)}
   .chip .cchain{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
   .chip .crm{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;border-radius:4px}
@@ -153,6 +156,7 @@
       <button class="btn" id="addtok">Add token</button>
     </div>
     <div class="chips" id="chips"></div>
+    <div class="chainhint" id="chainhint"></div>
 
     <div class="pairbox">
       <div class="field" style="margin:0">
@@ -178,11 +182,7 @@
     <!-- INPUTS -->
     <div>
       <div class="panel">
-        <div class="ph">Pool setup</div>
-        <div class="field row2">
-          <div><label>Token X (base)</label><input type="text" id="tx" value="WBTC"></div>
-          <div><label>Token Y (quote)</label><input type="text" id="ty" value="WETH"></div>
-        </div>
+        <div class="ph">Pool setup <span class="right" id="pairlabel">WBTC / WETH</span></div>
         <div class="field">
           <label>Price band <span class="u" id="punit">(WETH per WBTC)</span></label>
           <div class="row2">
@@ -276,8 +276,8 @@
 (function(){
   const $ = id => document.getElementById(id);
   const els = {};
-  ['chain','addr','addrhint','addtok','chips','base','quote','apply','derived','autoband','bandw','refresh','status','srctag','netdot','netlabel',
-   'tx','ty','pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','tunit','note','tnote',
+  ['chain','addr','addrhint','addtok','chips','chainhint','base','quote','apply','derived','autoband','bandw','refresh','status','srctag','netdot','netlabel',
+   'pairlabel','pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','tunit','note','tnote',
    'mult','herosub','mctr','veq','lar','lfr','resx','resy','rx','ry','thout',
    'ar_out','ar_px','ar_sl','fr_out','fr_px','fr_sl','slfac','chart','dxy','dyx','center','narrow','widen']
    .forEach(k=>els[k]=$(k));
@@ -294,18 +294,25 @@
 
   /* ---------- chains ---------- */
   const CHAINS=[['ethereum','Ethereum'],['arbitrum','Arbitrum'],['base','Base'],['optimism','Optimism'],
-    ['polygon','Polygon'],['bsc','BNB Chain'],['avax','Avalanche'],['xdai','Gnosis'],['coingecko','CoinGecko ID']];
+    ['polygon','Polygon'],['bsc','BNB Chain'],['avax','Avalanche'],['xdai','Gnosis'],['monad','Monad'],['coingecko','CoinGecko ID']];
   function chainLabel(k){const f=CHAINS.find(c=>c[0]===k);return f?f[1]:k;}
   els.chain.innerHTML=CHAINS.map(c=>'<option value="'+c[0]+'">'+c[1]+'</option>').join('');
   els.chain.addEventListener('change',()=>{
     const cg=els.chain.value==='coingecko';
     els.addrhint.textContent=cg?'(coingecko id)':'(0x...)';
     els.addr.placeholder=cg?'bitcoin':'0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+    // The chain is also the active context for the pair: you can only pair
+    // tokens that live on the same chain, so reset the selection on switch.
+    baseId=''; quoteId='';
+    render();
   });
 
   /* ---------- token state ---------- */
   let tokens = store.get(KEY) || {};
   let baseId='', quoteId='', dir='xy';
+  // The active pair symbols drive the model's labels. The token registry
+  // is the single source of truth — these are only ever set by applyPair().
+  let pairX='WBTC', pairY='WETH';
 
   function setNet(ok){ els.netdot.classList.toggle('off',!ok); els.netlabel.textContent=ok?'live':'offline'; }
   function status(msg,err){ els.status.textContent=msg||''; els.status.classList.toggle('err',!!err); }
@@ -348,14 +355,33 @@
   function removeToken(id){ delete tokens[id]; if(baseId===id)baseId=''; if(quoteId===id)quoteId=''; store.set(KEY,tokens); render(); }
 
   /* ---------- render registry ---------- */
+  function confDot(t){
+    if(t.price==null) return '';
+    const low=(t.confidence!=null && t.confidence<0.9);
+    const title=t.confidence!=null?('price confidence '+(t.confidence*100).toFixed(0)+'%'):'live price';
+    return '<span class="cdot'+(low?' low':'')+'" title="'+title+'"></span>';
+  }
   function render(){
-    els.chips.innerHTML=Object.values(tokens).map(t=>
-      '<div class="chip"><span class="csym">'+t.symbol+'</span><span class="cprice">'+(t.price!=null?'$'+smart(t.price):'&mdash;')+'</span><span class="cchain">'+chainLabel(t.chain)+'</span><button class="crm" data-rm="'+t.id+'">&times;</button></div>'
-    ).join('') || '<span style="color:var(--muted);font-size:12.5px">No tokens yet. Paste an address above. Defaults seed WBTC and WETH.</span>';
+    const activeChain=els.chain.value;
+    const all=Object.values(tokens);
+    const onChain=all.filter(t=>t.chain===activeChain);
+    const others=all.length-onChain.length;
+
+    // Chips: only the active chain's tokens (registry is chain-scoped)
+    els.chips.innerHTML=onChain.map(t=>
+      '<div class="chip">'+confDot(t)+'<span class="csym">'+t.symbol+'</span><span class="cprice">'+(t.price!=null?'$'+smart(t.price):'&mdash;')+'</span><button class="crm" data-rm="'+t.id+'">&times;</button></div>'
+    ).join('') || '<span style="color:var(--muted);font-size:12.5px">No tokens on '+chainLabel(activeChain)+' yet. Paste an address above.</span>';
     els.chips.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>removeToken(b.dataset.rm));
-    const opts='<option value="">&mdash;</option>'+Object.values(tokens).map(t=>'<option value="'+t.id+'">'+t.symbol+' &middot; '+chainLabel(t.chain)+'</option>').join('');
+
+    els.chainhint.textContent = others>0
+      ? ('+ '+others+' token'+(others>1?'s':'')+' saved on other chains — switch the Chain selector to use them.')
+      : '';
+
+    // Pair pickers: only the active chain's tokens, so you can only pair same-chain tokens
+    const opts='<option value="">&mdash;</option>'+onChain.map(t=>'<option value="'+t.id+'">'+t.symbol+'</option>').join('');
     els.base.innerHTML=opts; els.quote.innerHTML=opts;
-    if(tokens[baseId])els.base.value=baseId; if(tokens[quoteId])els.quote.value=quoteId;
+    if(tokens[baseId]&&tokens[baseId].chain===activeChain){els.base.value=baseId;} else {baseId='';}
+    if(tokens[quoteId]&&tokens[quoteId].chain===activeChain){els.quote.value=quoteId;} else {quoteId='';}
     updateDerived();
   }
   function updateDerived(){
@@ -369,7 +395,9 @@
   function applyPair(){
     const X=tokens[baseId],Y=tokens[quoteId]; if(!(X&&Y&&X.price&&Y.price))return;
     const P=X.price/Y.price;
-    els.tx.value=X.symbol; els.ty.value=Y.symbol; els.p.value=+P.toPrecision(8);
+    pairX=X.symbol; pairY=Y.symbol;
+    els.pairlabel.textContent=pairX+' / '+pairY;
+    els.p.value=+P.toPrecision(8);
     if(els.autoband.checked){ const w=Math.max(.0005,(parseFloat(els.bandw.value)||5)/100), s=1+w;
       els.pa.value=+(P/s).toPrecision(8); els.pb.value=+(P*s).toPrecision(8); }
     recompute();
@@ -396,7 +424,7 @@
     if(!full&&nP>Pb){return{out:xv-L/Math.sqrt(Pb),newP:Pb,exhausted:true};}return{out:xv-nxv,newP:nP,exhausted:false};}
 
   function recompute(){
-    const tx=els.tx.value||'X',ty=els.ty.value||'Y';
+    const tx=pairX||'X',ty=pairY||'Y';
     let Pa=num(els.pa),Pb=num(els.pb),P=num(els.p),V=num(els.v);
     els.punit.textContent='('+ty+' per '+tx+')'; els.vunit.textContent='(in '+ty+')';
     els.rx.textContent=tx; els.ry.textContent=ty;
@@ -477,12 +505,12 @@
       svg+='<line x1="'+cx.toFixed(1)+'" y1="'+padT+'" x2="'+cx.toFixed(1)+'" y2="'+(padT+plotH)+'" stroke="var(--line2)" stroke-width="1"/>';
       svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+sy(Math.min(curFr,ymax)).toFixed(1)+'" r="4" fill="var(--slate)"/>';
       svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+sy(Math.min(curAr,ymax)).toFixed(1)+'" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="1.5"/>';}
-    svg+='<text class="axlab" x="'+(padL+plotW/2)+'" y="'+(H-1)+'" text-anchor="middle" fill="var(--muted2)">trade size ('+(dir==='xy'?els.tx.value:els.ty.value)+' in)</text>';
+    svg+='<text class="axlab" x="'+(padL+plotW/2)+'" y="'+(H-1)+'" text-anchor="middle" fill="var(--muted2)">trade size ('+(dir==='xy'?pairX:pairY)+' in)</text>';
     els.chart.innerHTML=svg;
   }
 
   /* wiring */
-  ['pa','pb','p','v','ts','tx','ty'].forEach(k=>els[k].addEventListener('input',recompute));
+  ['pa','pb','p','v','ts'].forEach(k=>els[k].addEventListener('input',recompute));
   els.psl.addEventListener('input',()=>{els.p.value=els.psl.value;recompute();});
   els.tsl.addEventListener('input',()=>{els.ts.value=els.tsl.value;recompute();});
   els.center.onclick=()=>{const Pa=num(els.pa),Pb=num(els.pb);if(Pb>Pa){els.p.value=+Math.sqrt(Pa*Pb).toFixed(6);recompute();}};
@@ -500,7 +528,12 @@
       store.set(KEY,tokens);
     }
     const ids=Object.keys(tokens);
-    baseId = tokens[ids[0]]?ids[0]:''; quoteId = tokens[ids[1]]?ids[1]:'';
+    // Default the active chain to the first saved token's chain so returning
+    // users see their tokens immediately (registry is chain-scoped).
+    if(ids.length && tokens[ids[0]]) els.chain.value = tokens[ids[0]].chain;
+    // Seed the pair from the first two tokens on that same chain.
+    const sameChain = ids.filter(id => tokens[id].chain === els.chain.value);
+    baseId = sameChain[0] || ''; quoteId = sameChain[1] || '';
     render(); recompute();
     await refreshAll();
     if(tokens[baseId]&&tokens[quoteId]&&tokens[baseId].price&&tokens[quoteId].price) applyPair();

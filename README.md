@@ -15,9 +15,11 @@ That is the whole deploy. To serve it locally instead: `python3 -m http.server` 
 
 ## How it works
 
-Tokens. Pick a chain, paste an ERC20 contract address, Add. The app calls the DefiLlama coins API and stores the symbol, price, and confidence. CoinGecko ids are also supported (pick `CoinGecko ID` and enter a slug like `bitcoin`). Saved tokens persist in the browser via localStorage.
+Token registry (chain-scoped). Pick a chain, paste an ERC20 contract address, Add. The app calls the DefiLlama coins API and stores the symbol, price, and confidence. Each saved-token chip shows a confidence dot — gold when DefiLlama's price confidence is below 90%, so you can spot thin or stale prices before trusting them. CoinGecko ids are also supported (pick `CoinGecko ID` and enter a slug like `bitcoin`). Supported chains include Ethereum, Arbitrum, Base, Optimism, Polygon, BNB Chain, Avalanche, Gnosis, and Monad. Saved tokens persist in the browser via localStorage.
 
-Pair. Choose a Base token (X) and Quote token (Y). The pair price is `P = priceX / priceY` in USD, which reads as Y per X. Apply to model writes that price into the band and, if auto center is on, sets `Pa = P / (1 + w)` and `Pb = P * (1 + w)` so the price sits at the geometric center.
+The registry is the single source of truth for tokens. The selected chain is the active context: the chips and the Base/Quote pickers only show tokens on that chain, so you can only build a pair from same-chain tokens (which is what a real pool is). Switch the Chain selector to work with tokens saved on another chain.
+
+Pair. Choose a Base token (X) and Quote token (Y) from the active chain. The pair price is `P = priceX / priceY` in USD, which reads as Y per X. "Apply to model" writes that price into the band and, if auto center is on, sets `Pa = P / (1 + w)` and `Pb = P * (1 + w)` so the price sits at the geometric center. The Pool setup panel shows the active pair as a read-only label — there is no separate place to type token names, so the two can never disagree.
 
 Model. Depth is the liquidity constant `L`. For equal pool value the multiplier at price P is
 

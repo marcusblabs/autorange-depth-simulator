@@ -65,6 +65,9 @@
   .toggle button{flex:1;background:transparent;border:none;color:var(--muted2);font-family:inherit;font-size:12.5px;padding:9px;border-radius:6px;cursor:pointer;transition:all .14s}
   .toggle button.on{background:var(--accent);color:#ffffff;font-weight:600}
 
+  .vunit-toggle{display:inline-flex;gap:2px;margin-left:8px;vertical-align:middle;background:var(--bg2);border:1px solid var(--field-bd);border-radius:6px;padding:2px}
+  .vunit-toggle button{background:transparent;border:none;color:var(--muted2);font-family:inherit;font-size:10.5px;font-weight:600;letter-spacing:.04em;padding:3px 9px;border-radius:4px;cursor:pointer;text-transform:none}
+  .vunit-toggle button.on{background:var(--accent);color:#fff}
   .vusd{font-size:12.5px;color:var(--muted2);margin-top:8px}
   .vusd b{color:var(--accent);font-weight:600;font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif}
   .note{font-size:12px;color:var(--warn);margin-top:11px;line-height:1.4;display:none}
@@ -221,8 +224,13 @@
           </div>
         </div>
         <div class="field">
-          <label>Pool value <span class="u" id="vunit">(in WETH)</span></label>
-          <input type="number" id="v" value="2000" step="any">
+          <label>Pool value
+            <span class="vunit-toggle" id="vunit">
+              <button type="button" id="vuUsd" class="on">USD</button>
+              <button type="button" id="vuTok">WETH</button>
+            </span>
+          </label>
+          <input type="number" id="v" value="1000000" step="any">
           <div class="vusd" id="vusd"></div>
         </div>
         <div class="note" id="note"></div>
@@ -299,7 +307,7 @@
   const els = {};
   ['chain','addr','addrhint','addtok','chips','chainhint','base','quote','apply','derived','autoband','bandw','refresh','status','srctag','netdot','netlabel',
    'regpanel','regtoggle','regchev','regsummary','addchain','openlib',
-   'pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','vusd','tunit','note','tnote',
+   'pa','pb','p','psl','v','ts','tsl','punit','pctr','vunit','vuUsd','vuTok','vusd','tunit','note','tnote',
    'mult','herosub','mctr','veq','lar','lfr','resx','resy','rx','ry','thout',
    'ar_out','ar_px','ar_sl','fr_out','fr_px','fr_sl','slfac','chart','dxy','dyx','center','narrow','widen']
    .forEach(k=>els[k]=$(k));
@@ -338,6 +346,16 @@
   // Live USD price of the quote token (Y), captured when a pair is applied.
   // Pool value is denominated in Y, so USD value = V * quotePriceUsd.
   let quotePriceUsd=null;
+  // How the user enters Pool value: 'USD' or 'TOK' (the quote token).
+  // The model always works in token units; USD input is converted via quotePriceUsd.
+  let valueUnit='USD';
+  // Returns the pool value in quote-token (Y) units, whatever the input unit is.
+  function currentV(){
+    var raw=parseFloat(els.v.value);
+    if(!(raw>0)) return raw;
+    if(valueUnit==='USD') return quotePriceUsd ? raw/quotePriceUsd : raw;
+    return raw;
+  }
 
   function setNet(ok){ els.netdot.classList.toggle('off',!ok); els.netlabel.textContent=ok?'live':'offline'; }
   function status(msg,err){ els.status.textContent=msg||''; els.status.classList.toggle('err',!!err); }
@@ -476,8 +494,8 @@
 
   function recompute(){
     const tx=pairX||'X',ty=pairY||'Y';
-    let Pa=num(els.pa),Pb=num(els.pb),P=num(els.p),V=num(els.v);
-    els.punit.textContent='('+ty+' per '+tx+')'; els.vunit.textContent='(in '+ty+')';
+    let Pa=num(els.pa),Pb=num(els.pb),P=num(els.p),V=currentV();
+    els.punit.textContent='('+ty+' per '+tx+')'; els.vuTok.textContent=ty;
     els.rx.textContent=tx; els.ry.textContent=ty;
 
     let bad=false,msg='';[els.pa,els.pb,els.p,els.v].forEach(e=>e.classList.remove('bad'));
@@ -499,7 +517,12 @@
     els.mult.textContent=E.toFixed(1);
     els.mctr.innerHTML=Ectr.toFixed(1)+'&times;';
     els.veq.innerHTML=smart(V*E)+'<span class="unit">'+ty+'</span>';
-    els.vusd.innerHTML=(quotePriceUsd&&V>0)?'&approx; <b>$'+smart(V*quotePriceUsd)+'</b> at $'+smart(quotePriceUsd)+'/'+ty:'';
+    if(valueUnit==='USD'){
+      els.vusd.innerHTML = (V>0&&quotePriceUsd) ? '&approx; <b>'+smart(V)+' '+ty+'</b> at $'+smart(quotePriceUsd)+'/'+ty
+        : (V>0 ? '<span style="color:var(--warn)">Load a pair to fetch the live '+ty+' price for USD conversion</span>' : '');
+    } else {
+      els.vusd.innerHTML = (V>0&&quotePriceUsd) ? '&approx; <b>$'+smart(V*quotePriceUsd)+'</b> at $'+smart(quotePriceUsd)+'/'+ty : '';
+    }
     els.lar.textContent=smart(L); els.lfr.textContent=smart(Lfull);
     els.resx.innerHTML=smart(x)+'<span class="unit">'+tx+'</span>';
     els.resy.innerHTML=smart(y)+'<span class="unit">'+ty+'</span>';
@@ -563,6 +586,23 @@
 
   /* wiring */
   ['pa','pb','p','v','ts'].forEach(k=>els[k].addEventListener('input',recompute));
+
+  // Pool value unit toggle (USD <-> quote token). Converts the entered
+  // number so it stays the same real value when switching units.
+  function setValueUnit(u){
+    if(u===valueUnit){return;}
+    var raw=parseFloat(els.v.value);
+    if(raw>0 && quotePriceUsd){
+      if(u==='USD') els.v.value=+(raw*quotePriceUsd).toFixed(2);     // token -> USD
+      else          els.v.value=+(raw/quotePriceUsd).toPrecision(8); // USD -> token
+    }
+    valueUnit=u;
+    els.vuUsd.classList.toggle('on',u==='USD');
+    els.vuTok.classList.toggle('on',u!=='USD');
+    recompute();
+  }
+  els.vuUsd.addEventListener('click',()=>setValueUnit('USD'));
+  els.vuTok.addEventListener('click',()=>setValueUnit('TOK'));
   els.psl.addEventListener('input',()=>{els.p.value=els.psl.value;recompute();});
   els.tsl.addEventListener('input',()=>{els.ts.value=els.tsl.value;recompute();});
   els.center.onclick=()=>{const Pa=num(els.pa),Pb=num(els.pb);if(Pb>Pa){els.p.value=+Math.sqrt(Pa*Pb).toFixed(6);recompute();}};

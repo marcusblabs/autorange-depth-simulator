@@ -144,6 +144,18 @@
   svg{width:100%;height:auto;display:block}
   .axlab{fill:var(--muted);font-size:10px;font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif}
   .gridln{stroke:var(--line);stroke-width:1}
+  .chart-wrap{position:relative}
+  #chart{cursor:crosshair}
+  .chart-tip{
+    position:absolute;pointer-events:none;z-index:5;display:none;
+    background:var(--panel2);border:1px solid var(--field-bd);border-radius:7px;
+    padding:8px 10px;font-size:12px;line-height:1.5;white-space:nowrap;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);transform:translate(-50%,-100%);
+  }
+  .chart-tip .tip-x{color:var(--muted2);font-weight:600;margin-bottom:3px}
+  .chart-tip .tip-row{display:flex;align-items:center;gap:7px;color:var(--muted2)}
+  .chart-tip .tip-row b{margin-left:auto;color:var(--txt);font-variant-numeric:tabular-nums}
+  .chart-tip .tip-dot{width:9px;height:3px;border-radius:2px;display:inline-block}
 
   footer{margin-top:20px;border-top:1px solid var(--line);padding-top:16px;color:var(--muted);font-size:12px;line-height:1.6}
   footer code{font-family:"Satoshi",-apple-system,"Segoe UI",sans-serif;color:var(--muted2);background:var(--panel);padding:2px 6px;border-radius:5px;font-size:11.5px}
@@ -292,7 +304,10 @@
           <span><i class="swatch" style="background:var(--slate)"></i> Full range</span>
           <span><i class="swatch" style="background:var(--warn)"></i> band edge</span>
         </div>
-        <svg id="chart" viewBox="0 0 720 280" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="chart-wrap">
+          <svg id="chart" viewBox="0 0 720 280" preserveAspectRatio="xMidYMid meet"></svg>
+          <div class="chart-tip" id="chart-tip"></div>
+        </div>
       </div>
 
       <footer>
@@ -569,6 +584,12 @@
     ymax=Math.min(ymax*1.12,1);
     const sx=a=>padL+(a/xmax)*plotW, sy=s=>padT+plotH-(s/ymax)*plotH;
     const path=p=>p.map((q,i)=>(i?'L':'M')+sx(q[0]).toFixed(1)+' '+sy(q[1]).toFixed(1)).join(' ');
+    // Expose geometry + an evaluator so the hover handler can read values at any trade size.
+    chartCtx = { L, Lfull, P, bound, dir, xmax, ymax, padL, padR, padT, plotW, plotH, W, H,
+      eval(a){ const ideal=dir==='xy'?a*P:(a>0?a/P:0);
+        const ar=swap(L,P,bound,a,false), fr=swap(Lfull,P,bound,a,true);
+        const arSl=ideal>0?(ideal-ar.out)/ideal:0, frSl=ideal>0?(ideal-fr.out)/ideal:0;
+        return { arSl, frSl, exhausted:ar.exhausted }; } };
     let svg='';
     for(let i=0;i<=4;i++){const sv=ymax*i/4,yy=sy(sv);
       svg+='<line class="gridln" x1="'+padL+'" y1="'+yy.toFixed(1)+'" x2="'+(W-padR)+'" y2="'+yy.toFixed(1)+'"/>';
@@ -582,8 +603,45 @@
       svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+sy(Math.min(curFr,ymax)).toFixed(1)+'" r="4" fill="var(--slate)"/>';
       svg+='<circle cx="'+cx.toFixed(1)+'" cy="'+sy(Math.min(curAr,ymax)).toFixed(1)+'" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="1.5"/>';}
     svg+='<text class="axlab" x="'+(padL+plotW/2)+'" y="'+(H-1)+'" text-anchor="middle" fill="var(--muted2)">trade size ('+(dir==='xy'?pairX:pairY)+' in)</text>';
+    // Transparent capture rect (so empty plot area still receives pointer events) + empty hover layer.
+    svg+='<rect id="hit" x="'+padL+'" y="'+padT+'" width="'+plotW+'" height="'+plotH+'" fill="transparent"/>';
+    svg+='<g id="hov"></g>';
     els.chart.innerHTML=svg;
   }
+
+  /* ----- chart hover tooltip ----- */
+  let chartCtx=null;
+  (function setupChartHover(){
+    const svgEl=els.chart, tip=document.getElementById('chart-tip');
+    function move(e){
+      if(!chartCtx){return;}
+      const c=chartCtx, r=svgEl.getBoundingClientRect();
+      const vx=(e.clientX-r.left)/r.width*c.W;       // viewBox x (W=720)
+      let a=((vx-c.padL)/c.plotW)*c.xmax;
+      const hov=document.getElementById('hov');
+      if(vx<c.padL||vx>c.W-c.padR||!(c.xmax>0)){ tip.style.display='none'; if(hov)hov.innerHTML=''; return; }
+      a=Math.min(Math.max(a,0),c.xmax);
+      const m=c.eval(a);
+      const sx=c.padL+(a/c.xmax)*c.plotW;
+      const syAr=c.padT+c.plotH-(Math.min(m.arSl,c.ymax)/c.ymax)*c.plotH;
+      const syFr=c.padT+c.plotH-(Math.min(m.frSl,c.ymax)/c.ymax)*c.plotH;
+      if(hov) hov.innerHTML=
+        '<line x1="'+sx.toFixed(1)+'" y1="'+c.padT+'" x2="'+sx.toFixed(1)+'" y2="'+(c.padT+c.plotH)+'" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>'+
+        '<circle cx="'+sx.toFixed(1)+'" cy="'+syFr.toFixed(1)+'" r="4" fill="var(--slate)"/>'+
+        '<circle cx="'+sx.toFixed(1)+'" cy="'+syAr.toFixed(1)+'" r="4.5" fill="var(--accent)" stroke="var(--bg)" stroke-width="1.5"/>';
+      const tok=c.dir==='xy'?pairX:pairY;
+      tip.innerHTML=
+        '<div class="tip-x">'+smart(a)+' '+tok+' in</div>'+
+        '<div class="tip-row"><i class="tip-dot" style="background:var(--accent)"></i> AutoRange <b>'+pct(m.arSl)+(m.exhausted?' *':'')+'</b></div>'+
+        '<div class="tip-row"><i class="tip-dot" style="background:var(--slate)"></i> Full range <b>'+pct(m.frSl)+'</b></div>';
+      tip.style.display='block';
+      // Position the tooltip in wrapper px (map viewBox → element px).
+      const px=(sx/c.W)*r.width, py=(c.padT+6)/c.H*r.height;
+      tip.style.left=px+'px'; tip.style.top=py+'px';
+    }
+    svgEl.addEventListener('pointermove',move);
+    svgEl.addEventListener('pointerleave',()=>{ tip.style.display='none'; const h=document.getElementById('hov'); if(h)h.innerHTML=''; });
+  })();
 
   /* wiring */
   ['pa','pb','p','v','ts'].forEach(k=>els[k].addEventListener('input',recompute));
